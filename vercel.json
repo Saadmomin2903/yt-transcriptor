@@ -1,20 +1,16 @@
 {
     "version": 2,
-    "builds": [
-        {
-            "src": "main.py",
-            "use": "@vercel/python"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "main.py"
-        }
-    ],
     "functions": {
-        "main.py": {
-            "includeFiles": "youtube_cookies.txt"
-        }
-    }
-}
+      "api/main.py": {
+        "memory": 1024,
+        "maxDuration": 10,
+        "includeFiles": "youtube_cookies.txt"
+      }
+    },
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "api/main.py"
+      }
+    ]
+  }

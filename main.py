@@ -269,6 +269,9 @@ async def list_available_subtitles(url: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing subtitles: {str(e)}")
 
+
 if __name__ == '__main__':
     port = int(getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+
+app = app
