@@ -1,7 +1,7 @@
 {
     "version": 2,
     "functions": {
-      "api/main.py": {
+      "main.py": {
         "memory": 1024,
         "maxDuration": 10,
         "includeFiles": "youtube_cookies.txt"
@@ -10,7 +10,7 @@
     "routes": [
       {
         "src": "/(.*)",
-        "dest": "api/main.py"
+        "dest": "main.py"
       }
     ]
   }
