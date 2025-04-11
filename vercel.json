@@ -11,5 +11,10 @@
             "src": "/(.*)",
             "dest": "main.py"
         }
-    ]
+    ],
+    "functions": {
+    "api/*.py": {
+      "includeFiles": "youtube_cookies.txt"
+}
+    }
 }

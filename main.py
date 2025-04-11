@@ -7,8 +7,11 @@ from os import getenv
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp
 import json
+import os
 
 app = FastAPI()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+cookie_path = os.path.join(current_dir, 'youtube_cookies.txt')
 
 # Add CORS middleware
 app.add_middleware(
@@ -56,7 +59,8 @@ def get_transcript_with_ytdlp(video_url, preferred_langs=None):
         'subtitleslangs': preferred_langs,
         'subtitlesformat': 'json3',
         'quiet': True,
-        'no_warnings': True
+        'no_warnings': True,
+        'cookiefile': cookie_path
     }
     
     try:
