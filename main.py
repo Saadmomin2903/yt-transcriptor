@@ -47,10 +47,14 @@ def extract_video_id(url_str):
     
     raise HTTPException(status_code=400, detail="Could not extract video ID from URL")
 
-def get_transcript_with_ytdlp(video_url, preferred_langs=None):
+def get_transcript_with_ytdlp(video_url, preferred_langs=None, use_cookies=False):
     """Get transcript using yt-dlp"""
     if preferred_langs is None:
         preferred_langs = ['en']
+    
+    # Check if cookie file exists
+    if use_cookies and not os.path.exists(cookie_path):
+        print(f"Warning: Cookie file not found at {cookie_path}")
     
     ydl_opts = {
         'skip_download': True,
@@ -59,9 +63,12 @@ def get_transcript_with_ytdlp(video_url, preferred_langs=None):
         'subtitleslangs': preferred_langs,
         'subtitlesformat': 'json3',
         'quiet': True,
-        'no_warnings': True,
-        'cookiefile': cookie_path
+        'no_warnings': True
     }
+    
+    # Only add cookie file if requested and it exists
+    if use_cookies and os.path.exists(cookie_path):
+        ydl_opts['cookiefile'] = cookie_path
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -114,13 +121,6 @@ def get_transcript_with_ytdlp(video_url, preferred_langs=None):
                 raise Exception("Could not find subtitle URL")
             
             # Use yt-dlp's downloader to handle the request
-            ydl.urlopen(url).read()
-            
-            # Look for the downloaded subtitle file
-            subtitle_filename = ydl.prepare_filename(info)
-            subtitle_filename = subtitle_filename.rsplit('.', 1)[0] + f".{used_language}.json3"
-            
-            # On Vercel, we might not be able to write to disk, so let's fetch it directly
             subtitle_content = ydl.urlopen(url).read().decode('utf-8')
             subtitle_json = json.loads(subtitle_content)
             
@@ -160,13 +160,22 @@ async def get_youtube_transcript(link_request: Linkurl):
         
         print(f"Processing video ID: {video_id}")
         
-        # Get transcript with yt-dlp
+        # First try without cookies
         try:
-            transcript, language = get_transcript_with_ytdlp(url_str, link_request.languages)
+            transcript, language = get_transcript_with_ytdlp(url_str, link_request.languages, use_cookies=False)
         except Exception as e:
             error_message = str(e)
-            print(f"Error getting transcript with yt-dlp: {error_message}")
-            raise HTTPException(status_code=404, detail=f"Could not retrieve transcript: {error_message}")
+            # If got auth error and we have cookies, retry with cookies
+            if ("Sign in to confirm" in error_message or "bot" in error_message.lower()) and os.path.exists(cookie_path):
+                print("Retrying with cookies...")
+                try:
+                    transcript, language = get_transcript_with_ytdlp(url_str, link_request.languages, use_cookies=True)
+                except Exception as cookie_error:
+                    print(f"Error with cookies: {str(cookie_error)}")
+                    raise HTTPException(status_code=404, detail=f"Could not retrieve transcript even with cookies: {str(cookie_error)}")
+            else:
+                print(f"Error getting transcript: {error_message}")
+                raise HTTPException(status_code=404, detail=f"Could not retrieve transcript: {error_message}")
         
         if not transcript:
             raise HTTPException(status_code=404, detail="No transcript found")
@@ -200,28 +209,62 @@ async def root():
         "usage": "POST to /transcript with YouTube URL to get transcript"
     }
 
+@app.get("/debug")
+async def debug_info():
+    """Return debug information about the environment"""
+    cookie_exists = os.path.exists(cookie_path)
+    try:
+        dir_contents = os.listdir(current_dir) if os.path.exists(current_dir) else "Directory not found"
+    except Exception as e:
+        dir_contents = f"Error listing directory: {str(e)}"
+    
+    return {
+        "cookie_path": cookie_path,
+        "cookie_file_exists": cookie_exists,
+        "current_directory": current_dir,
+        "directory_contents": dir_contents
+    }
+
 @app.get("/available-subtitles")
 async def list_available_subtitles(url: str):
     """List all available subtitle languages for a YouTube video"""
     try:
-        ydl_opts = {
-            'skip_download': True,
-            'quiet': True,
-            'no_warnings': True
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            
-            subtitles = info.get('subtitles', {})
-            auto_subtitles = info.get('automatic_captions', {})
-            
-            return {
-                "video_id": info.get('id'),
-                "title": info.get('title'),
-                "manual_subtitles": list(subtitles.keys()),
-                "automatic_subtitles": list(auto_subtitles.keys())
+        # First try without cookies
+        try:
+            ydl_opts = {
+                'skip_download': True,
+                'quiet': True,
+                'no_warnings': True
             }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+        except Exception as e:
+            error_message = str(e)
+            # If got auth error and we have cookies, retry with cookies
+            if ("Sign in to confirm" in error_message or "bot" in error_message.lower()) and os.path.exists(cookie_path):
+                print("Retrying with cookies...")
+                ydl_opts = {
+                    'skip_download': True,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'cookiefile': cookie_path
+                }
+                
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            else:
+                raise Exception(error_message)
+        
+        subtitles = info.get('subtitles', {})
+        auto_subtitles = info.get('automatic_captions', {})
+        
+        return {
+            "video_id": info.get('id'),
+            "title": info.get('title'),
+            "manual_subtitles": list(subtitles.keys()),
+            "automatic_subtitles": list(auto_subtitles.keys())
+        }
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing subtitles: {str(e)}")

@@ -13,8 +13,8 @@
         }
     ],
     "functions": {
-    "api/*.py": {
-      "includeFiles": "youtube_cookies.txt"
-}
+        "main.py": {
+            "includeFiles": "youtube_cookies.txt"
+        }
     }
 }
